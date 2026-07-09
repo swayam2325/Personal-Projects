@@ -426,11 +426,175 @@ $('#search-input').addEventListener('input', (e) => {
   searchTimer = setTimeout(() => runSearch(q), 350);
 });
 
+// ---------------- Onboarding / profile ----------------
+const LB_PER_KG = 2.20462;
+const ACTIVITY_LABELS = {
+  '1.2': 'mostly sitting', '1.375': 'lightly active',
+  '1.55': 'active', '1.725': 'very active',
+};
+
+let obUnits = 'metric';
+
+function segValue(id) {
+  return $(`#${id} .seg-btn.active`).dataset.value;
+}
+
+function setSegValue(id, value) {
+  document.querySelectorAll(`#${id} .seg-btn`).forEach(b => {
+    b.classList.toggle('active', b.dataset.value === value);
+  });
+}
+
+// Mifflin-St Jeor BMR × activity factor, adjusted for the goal.
+function calcTargets(p) {
+  const bmr = 10 * p.weightKg + 6.25 * p.heightCm - 5 * p.age + (p.sex === 'male' ? 5 : -161);
+  const tdee = bmr * p.activity;
+  const delta = { lose: -500, maintain: 0, gain: 300 }[p.goal];
+  const kcal = Math.max(1200, Math.round((tdee + delta) / 10) * 10);
+  const protein = Math.round((p.weightKg * 1.6) / 5) * 5; // ~1.6 g/kg
+  return { kcal, protein };
+}
+
+function readProfileForm() {
+  let heightCm, weightKg;
+  if (obUnits === 'metric') {
+    heightCm = parseFloat($('#ob-height-cm').value);
+    weightKg = parseFloat($('#ob-weight').value);
+  } else {
+    const ft = parseFloat($('#ob-height-ft').value);
+    const inch = parseFloat($('#ob-height-in').value) || 0;
+    heightCm = (ft * 12 + inch) * 2.54;
+    weightKg = parseFloat($('#ob-weight').value) / LB_PER_KG;
+  }
+  const age = parseFloat($('#ob-age').value);
+  if (!(heightCm >= 100 && heightCm <= 250)) return null;
+  if (!(weightKg >= 25 && weightKg <= 400)) return null;
+  if (!(age >= 10 && age <= 100)) return null;
+  return {
+    units: obUnits,
+    heightCm: Math.round(heightCm * 10) / 10,
+    weightKg: Math.round(weightKg * 10) / 10,
+    age: Math.round(age),
+    sex: segValue('ob-sex'),
+    activity: parseFloat($('#ob-activity').value),
+    goal: segValue('ob-goal'),
+  };
+}
+
+function updateObPreview() {
+  const p = readProfileForm();
+  if (!p) {
+    $('#ob-kcal').textContent = '—';
+    $('#ob-protein').textContent = '—';
+    $('#ob-save').disabled = true;
+    return;
+  }
+  const { kcal, protein } = calcTargets(p);
+  $('#ob-kcal').textContent = fmt(kcal);
+  $('#ob-protein').textContent = String(protein);
+  $('#ob-save').disabled = false;
+}
+
+function switchUnits(next) {
+  if (next === obUnits) return;
+  const weightInput = $('#ob-weight');
+  const w = parseFloat(weightInput.value);
+  if (next === 'imperial') {
+    if (Number.isFinite(w)) weightInput.value = Math.round(w * LB_PER_KG);
+    const cm = parseFloat($('#ob-height-cm').value);
+    if (Number.isFinite(cm)) {
+      const totalIn = cm / 2.54;
+      $('#ob-height-ft').value = Math.floor(totalIn / 12);
+      $('#ob-height-in').value = Math.round(totalIn % 12);
+    }
+    $('#ob-weight-label').textContent = 'Weight (lb)';
+    weightInput.min = 55; weightInput.max = 880;
+  } else {
+    if (Number.isFinite(w)) weightInput.value = Math.round(w / LB_PER_KG);
+    const ft = parseFloat($('#ob-height-ft').value);
+    const inch = parseFloat($('#ob-height-in').value) || 0;
+    if (Number.isFinite(ft)) $('#ob-height-cm').value = Math.round((ft * 12 + inch) * 2.54);
+    $('#ob-weight-label').textContent = 'Weight (kg)';
+    weightInput.min = 25; weightInput.max = 400;
+  }
+  obUnits = next;
+  $('#ob-height-metric').hidden = next !== 'metric';
+  $('#ob-height-imperial').hidden = next !== 'imperial';
+}
+
+function openOnboarding(editing) {
+  const profile = getSettings().profile;
+  if (profile) {
+    setSegValue('ob-sex', profile.sex);
+    setSegValue('ob-goal', profile.goal);
+    $('#ob-activity').value = String(profile.activity);
+    $('#ob-height-cm').value = Math.round(profile.heightCm);
+    $('#ob-weight').value = Math.round(profile.weightKg);
+    obUnits = 'metric';
+    setSegValue('ob-units', profile.units);
+    switchUnits(profile.units);
+    $('#ob-age').value = profile.age;
+  }
+  $('#ob-close').hidden = !editing;
+  $('#ob-save').textContent = editing ? 'Save & update goal' : 'Start tracking';
+  updateObPreview();
+  $('#onboarding').hidden = false;
+}
+
+document.querySelectorAll('.segmented').forEach(seg => {
+  seg.addEventListener('click', (e) => {
+    const btn = e.target.closest('.seg-btn');
+    if (!btn) return;
+    seg.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (seg.id === 'ob-units') switchUnits(btn.dataset.value);
+    updateObPreview();
+  });
+});
+
+['ob-height-cm', 'ob-height-ft', 'ob-height-in', 'ob-weight', 'ob-age'].forEach(id => {
+  $(`#${id}`).addEventListener('input', updateObPreview);
+});
+$('#ob-activity').addEventListener('change', updateObPreview);
+
+$('#ob-save').addEventListener('click', () => {
+  const p = readProfileForm();
+  if (!p) {
+    toast('Check your height, weight and age');
+    return;
+  }
+  const { kcal, protein } = calcTargets(p);
+  updateSettings({ profile: p, calorieGoal: kcal, proteinGoal: protein });
+  $('#onboarding').hidden = true;
+  renderSettings();
+  renderToday();
+  toast(`Daily goal set to ${fmt(kcal)} kcal`);
+});
+
+$('#ob-close').addEventListener('click', () => {
+  $('#onboarding').hidden = true;
+});
+
+$('#edit-profile-btn').addEventListener('click', () => openOnboarding(true));
+
 // ---------------- Settings ----------------
+function profileSummary(p) {
+  if (!p) return 'Not set up yet.';
+  const height = p.units === 'imperial'
+    ? (() => { const t = p.heightCm / 2.54; return `${Math.floor(t / 12)}'${Math.round(t % 12)}"`; })()
+    : `${Math.round(p.heightCm)} cm`;
+  const weight = p.units === 'imperial'
+    ? `${Math.round(p.weightKg * LB_PER_KG)} lb`
+    : `${Math.round(p.weightKg)} kg`;
+  const goal = { lose: 'lose weight', maintain: 'maintain', gain: 'gain muscle' }[p.goal];
+  return `${height} · ${weight} · ${p.age} yrs · ${ACTIVITY_LABELS[String(p.activity)] || 'active'} · goal: ${goal}`;
+}
+
 function renderSettings() {
   const s = getSettings();
   $('#goal-input').value = s.calorieGoal;
   $('#protein-goal-input').value = s.proteinGoal;
+  $('#profile-summary').textContent = profileSummary(s.profile);
 }
 
 $('#goal-input').addEventListener('change', (e) => {
@@ -461,9 +625,11 @@ $('#clear-all-btn').addEventListener('click', () => {
   renderSettings();
   renderToday();
   toast('All data erased');
+  openOnboarding(false);
 });
 
 // ---------------- Init ----------------
 applyTheme(getSettings().theme);
 renderSettings();
 renderToday();
+if (!getSettings().profile) openOnboarding(false);

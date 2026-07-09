@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS = {
   calorieGoal: 2000,
   proteinGoal: 120,
   theme: 'dark',
+  profile: null, // { units, heightCm, weightKg, age, sex, activity, goal }
 };
 
 function read(key, fallback) {
