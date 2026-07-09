@@ -1,4 +1,5 @@
 import { lookupBarcode, searchProducts } from './api.js';
+import { analyzeMealPhoto, hasApiKeyShape } from './vision.js';
 import { searchCommonFoods } from './foods.js';
 import { BarcodeScanner } from './scanner.js';
 import {
@@ -51,10 +52,7 @@ function showView(name) {
   $(`#view-${name}`).classList.add('active');
   document.querySelector(`.nav-btn[data-view="${name}"]`).classList.add('active');
 
-  if (name !== 'scan' && scanner?.active) {
-    scanner.stop();
-    setScannerUI(false, 'Camera is off');
-  }
+  if (name !== 'scan') stopAllCameras();
   if (name === 'search') $('#search-input').focus();
 }
 
@@ -299,11 +297,40 @@ $('#quick-add-btn').addEventListener('click', () => {
   });
 });
 
-// ---------------- Scanner ----------------
+// ---------------- Scanner (meal photo + barcode) ----------------
+let scanMode = 'meal';
+let mealStream = null;
+
 function setScannerUI(live, statusText) {
   $('#scanner-viewport').classList.toggle('live', live);
   $('#scanner-status').textContent = statusText;
+  $('#capture-btn').hidden = !(live && scanMode === 'meal');
 }
+
+function stopAllCameras() {
+  if (scanner?.active) scanner.stop();
+  if (mealStream) {
+    mealStream.getTracks().forEach(t => t.stop());
+    mealStream = null;
+    $('#scanner-video').srcObject = null;
+  }
+  setScannerUI(false, 'Camera is off');
+}
+
+function setScanMode(mode) {
+  if (mode === scanMode) return;
+  stopAllCameras();
+  scanMode = mode;
+  const meal = mode === 'meal';
+  $('#barcode-frame').style.display = meal ? 'none' : '';
+  $('#meal-controls').hidden = !meal;
+  $('#barcode-controls').hidden = meal;
+  $('#scanner-off-emoji').textContent = meal ? '🍽️' : '📷';
+  $('#scanner-off-text').textContent = meal
+    ? 'Photograph your plate and AI estimates the calories'
+    : 'Point your camera at a food barcode';
+}
+$('#barcode-frame').style.display = 'none'; // meal mode is the default
 
 async function handleBarcode(code) {
   setScannerUI(false, `Found barcode ${code} — looking it up…`);
@@ -322,7 +349,7 @@ async function handleBarcode(code) {
   }
 }
 
-async function startScanner() {
+async function startBarcodeScanner() {
   if (!scanner) {
     scanner = new BarcodeScanner(
       $('#scanner-video'),
@@ -330,19 +357,230 @@ async function startScanner() {
       (msg) => setScannerUI(true, msg),
     );
   }
+  setScannerUI(false, 'Starting camera…');
+  await scanner.start();
+  setScannerUI(true, 'Scanning… center the barcode in the frame');
+}
+
+async function startMealCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error('Camera not supported in this browser — use "Upload a photo" below.');
+  }
+  if (!window.isSecureContext) {
+    throw new Error('Camera needs https or localhost — use "Upload a photo" below.');
+  }
+  setScannerUI(false, 'Starting camera…');
+  mealStream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    audio: false,
+  });
+  const video = $('#scanner-video');
+  video.srcObject = mealStream;
+  await video.play();
+  setScannerUI(true, 'Frame the whole plate, then tap the shutter');
+}
+
+$('#scanner-start').addEventListener('click', async () => {
   try {
-    setScannerUI(false, 'Starting camera…');
-    await scanner.start();
-    setScannerUI(true, 'Scanning… center the barcode in the frame');
+    if (scanMode === 'meal') await startMealCamera();
+    else await startBarcodeScanner();
   } catch (err) {
     const msg = err.name === 'NotAllowedError'
       ? 'Camera permission denied — allow camera access and try again.'
       : (err.message || 'Could not start the camera.');
     setScannerUI(false, msg);
   }
+});
+
+// Downscale an image source to a JPEG base64 string (controls API token cost).
+function toJpegBase64(source, width, height) {
+  const MAX_EDGE = 1280;
+  const scale = Math.min(1, MAX_EDGE / Math.max(width, height));
+  const canvas = $('#capture-canvas');
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
+  canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
 }
 
-$('#scanner-start').addEventListener('click', startScanner);
+$('#capture-btn').addEventListener('click', () => {
+  const video = $('#scanner-video');
+  if (!mealStream || video.readyState < 2) return;
+  const base64 = toJpegBase64(video, video.videoWidth, video.videoHeight);
+  stopAllCameras();
+  analyzePhoto(base64);
+});
+
+$('#photo-upload').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const base64 = toJpegBase64(bitmap, bitmap.width, bitmap.height);
+    bitmap.close();
+    stopAllCameras();
+    analyzePhoto(base64);
+  } catch {
+    toast("Couldn't read that image file");
+  }
+});
+
+// ---------------- AI meal analysis ----------------
+async function analyzePhoto(base64) {
+  const { apiKey } = getSettings();
+  if (!hasApiKeyShape(apiKey)) {
+    showApiKeySheet(() => analyzePhoto(base64));
+    return;
+  }
+
+  openSheet(`
+    <div class="sheet-loader">
+      <span class="spinner"></span>
+      <p>Analyzing your meal…</p>
+      <small>Identifying foods and estimating portions</small>
+    </div>
+  `);
+
+  try {
+    const result = await analyzeMealPhoto(base64, apiKey);
+    showMealSheet(result);
+  } catch (err) {
+    openSheet(`
+      <div class="sheet-loader">
+        <div class="empty-emoji">😕</div>
+        <p>${escapeHtml(err.message || 'Analysis failed')}</p>
+        <button class="sheet-cancel" id="sheet-cancel">Close</button>
+      </div>
+    `);
+    $('#sheet-cancel').addEventListener('click', closeSheet);
+  }
+}
+
+function showApiKeySheet(onSaved) {
+  openSheet(`
+    <div class="product-header">
+      <div class="product-img">🔑</div>
+      <div>
+        <div class="product-name">Add your Claude API key</div>
+        <div class="product-brand">Needed once for AI meal recognition</div>
+      </div>
+    </div>
+    <p class="ai-notes">Create a key at <strong>platform.claude.com</strong> → API keys. Each meal scan costs a few cents. The key is stored only on this device.</p>
+    <div class="quick-form">
+      <input id="key-input" type="password" placeholder="sk-ant-…" autocomplete="off" />
+    </div>
+    <div class="sheet-actions">
+      <button class="sheet-cancel" id="sheet-cancel">Cancel</button>
+      <button class="primary-btn" id="key-save">Save & analyze</button>
+    </div>
+  `);
+  $('#sheet-cancel').addEventListener('click', closeSheet);
+  $('#key-save').addEventListener('click', () => {
+    const key = $('#key-input').value.trim();
+    if (!hasApiKeyShape(key)) {
+      toast('That doesn’t look like a Claude API key (sk-ant-…)');
+      return;
+    }
+    updateSettings({ apiKey: key });
+    renderSettings();
+    onSaved();
+  });
+}
+
+function showMealSheet(result) {
+  let items = [...result.items];
+
+  openSheet(`
+    <div class="product-header">
+      <div class="product-img">🤖</div>
+      <div>
+        <div class="product-name">${escapeHtml(result.mealName)}</div>
+        <div class="product-brand">AI estimate — adjust portions if needed</div>
+      </div>
+    </div>
+    ${result.notes ? `<p class="ai-notes">${escapeHtml(result.notes)}</p>` : ''}
+    <div id="ai-items"></div>
+    <div class="ai-total"><span>Total</span><span id="ai-total-kcal">0 kcal</span></div>
+    <div class="sheet-actions">
+      <button class="sheet-cancel" id="sheet-cancel">Cancel</button>
+      <button class="primary-btn" id="ai-add-all">Add to diary</button>
+    </div>
+  `);
+
+  function itemKcal(it) {
+    return it.kcalPer100g * (it.grams / 100);
+  }
+
+  function renderItems() {
+    $('#ai-items').innerHTML = items.map((it, i) => `
+      <div class="ai-item">
+        <div class="ai-item-emoji">${escapeHtml(it.emoji)}</div>
+        <div class="ai-item-info">
+          <div class="ai-item-name">${escapeHtml(it.name)}</div>
+          <div class="ai-item-meta">${fmt(it.kcalPer100g)} kcal/100g · <span class="ai-confidence ${it.confidence}">${it.confidence} confidence</span></div>
+        </div>
+        <input class="ai-item-grams" data-idx="${i}" type="number" min="1" max="5000" value="${it.grams}" />
+        <span class="ai-item-unit">g</span>
+        <div class="ai-item-kcal" id="ai-kcal-${i}">${fmt(itemKcal(it))} kcal</div>
+        <button class="ai-item-remove" data-idx="${i}" aria-label="Remove ${escapeHtml(it.name)}">✕</button>
+      </div>
+    `).join('');
+
+    document.querySelectorAll('.ai-item-grams').forEach(input => {
+      input.addEventListener('input', () => {
+        const i = Number(input.dataset.idx);
+        const g = parseFloat(input.value);
+        items[i].grams = Number.isFinite(g) && g > 0 ? g : 0;
+        $(`#ai-kcal-${i}`).textContent = `${fmt(itemKcal(items[i]))} kcal`;
+        updateTotal();
+      });
+    });
+    document.querySelectorAll('.ai-item-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        items.splice(Number(btn.dataset.idx), 1);
+        renderItems();
+        updateTotal();
+      });
+    });
+    updateTotal();
+  }
+
+  function updateTotal() {
+    const total = items.reduce((s, it) => s + itemKcal(it), 0);
+    $('#ai-total-kcal').textContent = `${fmt(total)} kcal`;
+    $('#ai-add-all').disabled = items.length === 0;
+  }
+
+  renderItems();
+
+  $('#sheet-cancel').addEventListener('click', closeSheet);
+  $('#ai-add-all').addEventListener('click', () => {
+    const key = dateKey(currentDate);
+    let total = 0;
+    for (const it of items) {
+      if (it.grams <= 0) continue;
+      const f = it.grams / 100;
+      total += it.kcalPer100g * f;
+      addEntry(key, {
+        name: it.name,
+        brand: 'AI estimate',
+        emoji: it.emoji,
+        image: null,
+        grams: it.grams,
+        kcal: it.kcalPer100g * f,
+        protein: it.proteinPer100g * f,
+        carbs: it.carbsPer100g * f,
+        fat: it.fatPer100g * f,
+        source: 'ai',
+      });
+    }
+    closeSheet();
+    toast(`Added ${items.length} item${items.length === 1 ? '' : 's'} · ${fmt(total)} kcal`);
+    renderToday();
+    showView('today');
+  });
+}
 
 $('#manual-lookup').addEventListener('click', () => {
   const code = $('#manual-barcode').value.trim();
@@ -547,6 +785,10 @@ document.querySelectorAll('.segmented').forEach(seg => {
     if (!btn) return;
     seg.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    if (seg.id === 'scan-mode') {
+      setScanMode(btn.dataset.value);
+      return;
+    }
     if (seg.id === 'ob-units') switchUnits(btn.dataset.value);
     updateObPreview();
   });
@@ -595,7 +837,18 @@ function renderSettings() {
   $('#goal-input').value = s.calorieGoal;
   $('#protein-goal-input').value = s.proteinGoal;
   $('#profile-summary').textContent = profileSummary(s.profile);
+  $('#api-key-input').value = s.apiKey || '';
 }
+
+$('#api-key-input').addEventListener('change', (e) => {
+  const key = e.target.value.trim();
+  if (key && !hasApiKeyShape(key)) {
+    toast('That doesn’t look like a Claude API key (sk-ant-…)');
+    return;
+  }
+  updateSettings({ apiKey: key || null });
+  if (key) toast('API key saved on this device');
+});
 
 $('#goal-input').addEventListener('change', (e) => {
   const v = Math.min(Math.max(parseInt(e.target.value, 10) || 2000, 800), 10000);

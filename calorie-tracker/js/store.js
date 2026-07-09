@@ -9,6 +9,7 @@ const DEFAULT_SETTINGS = {
   proteinGoal: 120,
   theme: 'dark',
   profile: null, // { units, heightCm, weightKg, age, sex, activity, goal }
+  apiKey: null,  // Claude API key for AI meal recognition (stays on-device)
 };
 
 function read(key, fallback) {

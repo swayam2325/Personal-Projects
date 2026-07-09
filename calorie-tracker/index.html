@@ -97,26 +97,42 @@
       <!-- ===== Scanner ===== -->
       <section class="view" id="view-scan">
         <div class="scanner-shell">
+          <div class="segmented scan-mode" id="scan-mode">
+            <button class="seg-btn active" data-value="meal">🍽️ Meal photo</button>
+            <button class="seg-btn" data-value="barcode">▐║▌ Barcode</button>
+          </div>
+
           <div class="scanner-viewport" id="scanner-viewport">
             <video id="scanner-video" playsinline muted></video>
-            <div class="scan-frame">
+            <div class="scan-frame" id="barcode-frame">
               <span class="corner tl"></span><span class="corner tr"></span>
               <span class="corner bl"></span><span class="corner br"></span>
               <div class="scan-line"></div>
             </div>
+            <button class="capture-btn" id="capture-btn" hidden aria-label="Take photo"></button>
             <div class="scanner-off" id="scanner-off">
-              <div class="empty-emoji">📷</div>
-              <p>Point your camera at a food barcode</p>
+              <div class="empty-emoji" id="scanner-off-emoji">🍽️</div>
+              <p id="scanner-off-text">Photograph your plate and AI estimates the calories</p>
               <button class="primary-btn" id="scanner-start">Start camera</button>
             </div>
           </div>
           <p class="scanner-status" id="scanner-status">Camera is off</p>
-          <div class="manual-entry">
+
+          <div class="meal-controls" id="meal-controls">
+            <label class="upload-btn" for="photo-upload">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.35-4.35a1.5 1.5 0 0 0-2.12 0L5 20"/></svg>
+              Upload a photo instead
+              <input type="file" id="photo-upload" accept="image/*" hidden />
+            </label>
+          </div>
+
+          <div class="manual-entry" id="barcode-controls" hidden>
             <input type="text" id="manual-barcode" inputmode="numeric" pattern="[0-9]*"
                    placeholder="…or type a barcode, e.g. 3017624010701" />
             <button class="primary-btn" id="manual-lookup">Look up</button>
           </div>
         </div>
+        <canvas id="capture-canvas" hidden></canvas>
       </section>
 
       <!-- ===== Search ===== -->
@@ -148,6 +164,14 @@
           <div class="setting-row">
             <label for="protein-goal-input">Protein target (g)</label>
             <input type="number" id="protein-goal-input" min="20" max="400" step="5" />
+          </div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">AI meal scan</h2>
+          <p class="profile-summary">Photo-based food recognition uses the Claude API with your own key from <a href="https://platform.claude.com/" target="_blank" rel="noopener">platform.claude.com</a> (each scan costs a few cents). The key is stored only on this device.</p>
+          <div class="setting-row">
+            <label for="api-key-input">Claude API key</label>
+            <input type="password" id="api-key-input" class="api-key-field" placeholder="sk-ant-…" autocomplete="off" />
           </div>
         </div>
         <div class="card">
