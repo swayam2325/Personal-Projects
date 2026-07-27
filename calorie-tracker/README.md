@@ -22,9 +22,13 @@ Everything you log stays on your device.
 - **⚖️ Portion control** — enter grams directly or tap serving-size chips
   (½ / 1 / 2 servings); calories and macros update live before you add.
 - **✏️ Quick add** — log homemade meals with just a name and calories.
+- **👥 Profiles** — Netflix-style profile picker on launch; each person on the
+  device gets their own goals, food log, and API key, switchable anytime from
+  the avatar in the header.
 - **🌙 Modern UI** — dark & light themes, bottom navigation, bottom-sheet
   product cards, mobile-first responsive layout.
-- **🔒 Private** — all data lives in your browser's localStorage.
+- **🔒 Private** — all data lives in your browser's localStorage; the API key
+  is stored per-profile and never displayed again after entry.
 
 ## Run it
 
