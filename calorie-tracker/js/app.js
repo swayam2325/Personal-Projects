@@ -4,7 +4,8 @@ import { searchCommonFoods } from './foods.js';
 import { BarcodeScanner } from './scanner.js';
 import {
   getSettings, updateSettings,
-  dateKey, getEntries, addEntry, removeEntry, clearDay, clearAll, getTotals,
+  dateKey, getEntries, addEntry, removeEntry, clearDay, getTotals,
+  listUsers, getActiveUser, setActiveUser, createUser, deleteActiveUser, migrateLegacyData,
 } from './store.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -472,7 +473,7 @@ function showApiKeySheet(onSaved) {
     </div>
     <div class="sheet-actions">
       <button class="sheet-cancel" id="sheet-cancel">Cancel</button>
-      <button class="primary-btn" id="key-save">Save & analyze</button>
+      <button class="primary-btn" id="key-save">Save key</button>
     </div>
   `);
   $('#sheet-cancel').addEventListener('click', closeSheet);
@@ -664,6 +665,107 @@ $('#search-input').addEventListener('input', (e) => {
   searchTimer = setTimeout(() => runSearch(q), 350);
 });
 
+// ---------------- Profiles / login ----------------
+const AVATAR_EMOJIS = ['😀', '😎', '🦊', '🐼', '🦁', '🐨', '🐸', '🦄', '🌟', '🍀', '🔥', '🌊'];
+let chosenEmoji = AVATAR_EMOJIS[0];
+
+function openLogin(switching) {
+  const users = listUsers();
+  $('#login-close').hidden = !switching;
+  $('#login-title').textContent = users.length ? "Who's tracking?" : 'Welcome to NutriScan';
+  $('#login-sub').textContent = users.length
+    ? 'Pick your profile — each one keeps its own goals and food log on this device.'
+    : 'Create your profile to get started. You can add more later and switch anytime.';
+
+  const grid = $('#login-profiles');
+  grid.innerHTML = users.map(u => `
+    <button class="profile-card" data-id="${u.id}">
+      <span class="profile-card-emoji">${escapeHtml(u.emoji)}</span>
+      <span class="profile-card-name">${escapeHtml(u.name)}</span>
+    </button>
+  `).join('') + (users.length ? `
+    <button class="profile-card add" id="add-profile-card">
+      <span class="profile-card-emoji">＋</span>
+      <span class="profile-card-name">New profile</span>
+    </button>` : '');
+
+  grid.querySelectorAll('.profile-card[data-id]').forEach(card => {
+    card.addEventListener('click', () => {
+      setActiveUser(card.dataset.id);
+      $('#login').hidden = true;
+      enterApp();
+    });
+  });
+  $('#add-profile-card')?.addEventListener('click', () => showCreateForm(true));
+
+  showCreateForm(users.length === 0);
+  if (users.length === 0) $('#login-back').hidden = true;
+  $('#login').hidden = false;
+}
+
+function showCreateForm(show) {
+  $('#login-create').hidden = !show;
+  $('#login-profiles').style.display = show ? 'none' : '';
+  if (show) {
+    $('#login-back').hidden = listUsers().length === 0;
+    $('#new-user-name').value = '';
+    chosenEmoji = AVATAR_EMOJIS[Math.floor(Math.random() * AVATAR_EMOJIS.length)];
+    renderEmojiRow();
+    setTimeout(() => $('#new-user-name').focus(), 100);
+  }
+}
+
+function renderEmojiRow() {
+  $('#emoji-row').innerHTML = AVATAR_EMOJIS.map(e =>
+    `<button class="emoji-opt ${e === chosenEmoji ? 'active' : ''}" data-emoji="${e}">${e}</button>`
+  ).join('');
+  document.querySelectorAll('.emoji-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      chosenEmoji = btn.dataset.emoji;
+      renderEmojiRow();
+    });
+  });
+}
+
+$('#create-user-btn').addEventListener('click', () => {
+  const name = $('#new-user-name').value.trim();
+  if (!name) {
+    toast('Enter your name first');
+    return;
+  }
+  createUser(name, chosenEmoji);
+  $('#login').hidden = true;
+  enterApp(); // opens body-stats onboarding automatically for a fresh profile
+});
+
+$('#new-user-name').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('#create-user-btn').click();
+});
+
+$('#login-back').addEventListener('click', () => showCreateForm(false));
+$('#login-close').addEventListener('click', () => { $('#login').hidden = true; });
+$('#avatar-btn').addEventListener('click', () => openLogin(true));
+
+function updateAvatar() {
+  const user = getActiveUser();
+  $('#avatar-btn').hidden = !user;
+  if (user) {
+    $('#avatar-emoji').textContent = user.emoji;
+    $('#avatar-btn').title = `${user.name} — switch profile`;
+  }
+}
+
+// Everything that must re-render when a profile logs in or switches.
+function enterApp() {
+  applyTheme(getSettings().theme);
+  updateAvatar();
+  renderSettings();
+  currentDate = new Date();
+  renderToday();
+  showView('today');
+  if (!getSettings().profile) openOnboarding(false);
+}
+
 // ---------------- Onboarding / profile ----------------
 const LB_PER_KG = 2.20462;
 const ACTIVITY_LABELS = {
@@ -837,18 +939,55 @@ function renderSettings() {
   $('#goal-input').value = s.calorieGoal;
   $('#protein-goal-input').value = s.proteinGoal;
   $('#profile-summary').textContent = profileSummary(s.profile);
-  $('#api-key-input').value = s.apiKey || '';
+  renderApiKeyStatus();
 }
 
-$('#api-key-input').addEventListener('change', (e) => {
-  const key = e.target.value.trim();
-  if (key && !hasApiKeyShape(key)) {
-    toast('That doesn’t look like a Claude API key (sk-ant-…)');
-    return;
+// The key itself is never rendered back into the page — status only.
+function renderApiKeyStatus() {
+  const container = $('#api-key-status');
+  const hasKey = hasApiKeyShape(getSettings().apiKey);
+  if (hasKey) {
+    container.innerHTML = `
+      <div class="key-row">
+        <span class="key-chip">✓ API key saved</span>
+        <div class="key-actions">
+          <button class="key-btn" id="key-replace">Replace</button>
+          <button class="key-btn remove" id="key-remove">Remove</button>
+        </div>
+      </div>`;
+    $('#key-replace').addEventListener('click', () => {
+      showApiKeySheet(() => {
+        closeSheet();
+        renderApiKeyStatus();
+        toast('API key updated');
+      });
+    });
+    $('#key-remove').addEventListener('click', () => {
+      if (!confirm('Remove the API key from this profile?')) return;
+      updateSettings({ apiKey: null });
+      renderApiKeyStatus();
+      toast('API key removed');
+    });
+  } else {
+    container.innerHTML = `
+      <div class="key-add-row">
+        <input type="password" id="key-add-input" placeholder="Paste key: sk-ant-…" autocomplete="off" />
+        <button class="primary-btn" id="key-add-save">Save</button>
+      </div>`;
+    $('#key-add-save').addEventListener('click', () => {
+      const key = $('#key-add-input').value.trim();
+      if (!hasApiKeyShape(key)) {
+        toast('That doesn’t look like a Claude API key (sk-ant-…)');
+        return;
+      }
+      updateSettings({ apiKey: key });
+      renderApiKeyStatus();
+      toast('API key saved on this device');
+    });
   }
-  updateSettings({ apiKey: key || null });
-  if (key) toast('API key saved on this device');
-});
+}
+
+$('#switch-profile-btn').addEventListener('click', () => openLogin(true));
 
 $('#goal-input').addEventListener('change', (e) => {
   const v = Math.min(Math.max(parseInt(e.target.value, 10) || 2000, 800), 10000);
@@ -871,18 +1010,20 @@ $('#clear-day-btn').addEventListener('click', () => {
   toast('Day cleared');
 });
 
-$('#clear-all-btn').addEventListener('click', () => {
-  if (!confirm('Erase ALL logged food and settings? This cannot be undone.')) return;
-  clearAll();
-  applyTheme(getSettings().theme);
-  renderSettings();
-  renderToday();
-  toast('All data erased');
-  openOnboarding(false);
+$('#delete-profile-btn').addEventListener('click', () => {
+  const user = getActiveUser();
+  if (!user) return;
+  if (!confirm(`Delete the profile "${user.name}" and all its logged food? This cannot be undone.`)) return;
+  deleteActiveUser();
+  toast('Profile deleted');
+  openLogin(false);
 });
 
 // ---------------- Init ----------------
-applyTheme(getSettings().theme);
-renderSettings();
-renderToday();
-if (!getSettings().profile) openOnboarding(false);
+migrateLegacyData();
+if (getActiveUser()) {
+  enterApp();
+} else {
+  applyTheme(getSettings().theme);
+  openLogin(false);
+}
