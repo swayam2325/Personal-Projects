@@ -7,6 +7,12 @@
   <title>NutriScan — Calorie Tracker</title>
   <meta name="description" content="Scan any food barcode with your camera and track calories. Powered by Open Food Facts." />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥗</text></svg>" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <!-- iOS home-screen install: needs a real PNG; it ignores the manifest icons -->
+  <link rel="apple-touch-icon" href="icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="NutriScan" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
@@ -179,11 +185,6 @@
           </div>
         </div>
         <div class="card">
-          <h2 class="card-title">AI meal scan</h2>
-          <p class="profile-summary">Photo recognition uses the Claude API with your own key from <a href="https://platform.claude.com/" target="_blank" rel="noopener">platform.claude.com</a> (each scan costs a few cents). The key is stored only on this device and is never displayed.</p>
-          <div id="api-key-status"></div>
-        </div>
-        <div class="card">
           <h2 class="card-title">Data</h2>
           <button class="danger-btn" id="clear-day-btn">Clear this day's log</button>
           <button class="danger-btn" id="delete-profile-btn">Delete this profile</button>
@@ -191,6 +192,7 @@
         <div class="card about-card">
           <h2 class="card-title">About</h2>
           <p>Product data and images come from <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>, an open database licensed under the ODbL. Generic food values are based on USDA FoodData Central. Everything you log stays on this device.</p>
+          <p class="about-note">Meal photos are sent to the <a href="https://platform.claude.com/" target="_blank" rel="noopener">Claude API</a> for recognition, using a key you enter when you scan. The key is held in memory for that visit only and is never saved.</p>
         </div>
       </section>
     </main>

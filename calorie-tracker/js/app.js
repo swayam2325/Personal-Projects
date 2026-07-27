@@ -5,7 +5,8 @@ import { BarcodeScanner } from './scanner.js';
 import {
   getSettings, updateSettings,
   dateKey, getEntries, addEntry, removeEntry, clearDay, getTotals,
-  listUsers, getActiveUser, setActiveUser, createUser, deleteActiveUser, migrateLegacyData,
+  listUsers, getActiveUser, setActiveUser, createUser, deleteActiveUser,
+  migrateLegacyData, purgeStoredApiKeys,
 } from './store.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -16,6 +17,10 @@ const RING_CIRCUMFERENCE = 2 * Math.PI * 86; // matches r=86 in the SVG
 let currentDate = new Date();
 let scanner = null;
 let searchAbort = null;
+// Claude API key for meal scanning. Memory only — never written to storage,
+// so it disappears when the tab closes. The browser's password manager is
+// what remembers it between sessions.
+let sessionApiKey = null;
 
 // ---------------- Helpers ----------------
 const fmt = (n) => Math.round(n).toLocaleString();
@@ -429,8 +434,7 @@ $('#photo-upload').addEventListener('change', async (e) => {
 
 // ---------------- AI meal analysis ----------------
 async function analyzePhoto(base64) {
-  const { apiKey } = getSettings();
-  if (!hasApiKeyShape(apiKey)) {
+  if (!hasApiKeyShape(sessionApiKey)) {
     showApiKeySheet(() => analyzePhoto(base64));
     return;
   }
@@ -444,7 +448,7 @@ async function analyzePhoto(base64) {
   `);
 
   try {
-    const result = await analyzeMealPhoto(base64, apiKey);
+    const result = await analyzeMealPhoto(base64, sessionApiKey);
     showMealSheet(result);
   } catch (err) {
     openSheet(`
@@ -463,28 +467,32 @@ function showApiKeySheet(onSaved) {
     <div class="product-header">
       <div class="product-img">🔑</div>
       <div>
-        <div class="product-name">Add your Claude API key</div>
-        <div class="product-brand">Needed once for AI meal recognition</div>
+        <div class="product-name">Claude API key</div>
+        <div class="product-brand">Used for this visit only — never saved</div>
       </div>
     </div>
-    <p class="ai-notes">Create a key at <strong>platform.claude.com</strong> → API keys. Each meal scan costs a few cents. The key is stored only on this device.</p>
-    <div class="quick-form">
-      <input id="key-input" type="password" placeholder="sk-ant-…" autocomplete="off" />
-    </div>
+    <p class="ai-notes">The app doesn't store your key: it's kept in memory until you close the tab, so let your browser's password manager fill it in. Get one at <strong>platform.claude.com</strong> → API keys (each scan costs a few cents).</p>
+    <form class="quick-form" id="key-form">
+      <input id="key-input" type="password" name="claude-api-key"
+             autocomplete="current-password" placeholder="sk-ant-…" />
+    </form>
     <div class="sheet-actions">
       <button class="sheet-cancel" id="sheet-cancel">Cancel</button>
-      <button class="primary-btn" id="key-save">Save key</button>
+      <button class="primary-btn" id="key-save">Continue</button>
     </div>
   `);
   $('#sheet-cancel').addEventListener('click', closeSheet);
+  $('#key-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    $('#key-save').click();
+  });
   $('#key-save').addEventListener('click', () => {
     const key = $('#key-input').value.trim();
     if (!hasApiKeyShape(key)) {
       toast('That doesn’t look like a Claude API key (sk-ant-…)');
       return;
     }
-    updateSettings({ apiKey: key });
-    renderSettings();
+    sessionApiKey = key;
     onSaved();
   });
 }
@@ -939,52 +947,6 @@ function renderSettings() {
   $('#goal-input').value = s.calorieGoal;
   $('#protein-goal-input').value = s.proteinGoal;
   $('#profile-summary').textContent = profileSummary(s.profile);
-  renderApiKeyStatus();
-}
-
-// The key itself is never rendered back into the page — status only.
-function renderApiKeyStatus() {
-  const container = $('#api-key-status');
-  const hasKey = hasApiKeyShape(getSettings().apiKey);
-  if (hasKey) {
-    container.innerHTML = `
-      <div class="key-row">
-        <span class="key-chip">✓ API key saved</span>
-        <div class="key-actions">
-          <button class="key-btn" id="key-replace">Replace</button>
-          <button class="key-btn remove" id="key-remove">Remove</button>
-        </div>
-      </div>`;
-    $('#key-replace').addEventListener('click', () => {
-      showApiKeySheet(() => {
-        closeSheet();
-        renderApiKeyStatus();
-        toast('API key updated');
-      });
-    });
-    $('#key-remove').addEventListener('click', () => {
-      if (!confirm('Remove the API key from this profile?')) return;
-      updateSettings({ apiKey: null });
-      renderApiKeyStatus();
-      toast('API key removed');
-    });
-  } else {
-    container.innerHTML = `
-      <div class="key-add-row">
-        <input type="password" id="key-add-input" placeholder="Paste key: sk-ant-…" autocomplete="off" />
-        <button class="primary-btn" id="key-add-save">Save</button>
-      </div>`;
-    $('#key-add-save').addEventListener('click', () => {
-      const key = $('#key-add-input').value.trim();
-      if (!hasApiKeyShape(key)) {
-        toast('That doesn’t look like a Claude API key (sk-ant-…)');
-        return;
-      }
-      updateSettings({ apiKey: key });
-      renderApiKeyStatus();
-      toast('API key saved on this device');
-    });
-  }
 }
 
 $('#switch-profile-btn').addEventListener('click', () => openLogin(true));
@@ -1021,6 +983,7 @@ $('#delete-profile-btn').addEventListener('click', () => {
 
 // ---------------- Init ----------------
 migrateLegacyData();
+purgeStoredApiKeys(); // drop keys saved by earlier versions
 if (getActiveUser()) {
   enterApp();
 } else {

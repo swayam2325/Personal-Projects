@@ -432,7 +432,6 @@ a { color: var(--accent); }
   font-weight: 700; font-size: 15px;
 }
 
-.api-key-field { width: 170px !important; text-align: left !important; font-size: 13px !important; }
 
 .sheet-loader { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 36px 20px; text-align: center; }
 .sheet-loader .spinner { width: 28px; height: 28px; border-width: 3px; }
@@ -577,6 +576,7 @@ a { color: var(--accent); }
 .setting-row input:focus { border-color: var(--accent); }
 
 .about-card p { font-size: 13.5px; color: var(--ink-2); }
+.about-note { margin-top: 10px; color: var(--ink-muted) !important; }
 
 /* ============ Bottom nav ============ */
 .bottom-nav {
@@ -870,42 +870,6 @@ a { color: var(--accent); }
 }
 .emoji-opt:hover { transform: scale(1.08); }
 .emoji-opt.active { border-color: var(--accent); background: var(--accent-soft); }
-
-/* ============ API key status ============ */
-.key-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 4px 0;
-}
-.key-chip {
-  display: inline-flex; align-items: center; gap: 7px;
-  font-size: 13.5px; font-weight: 600;
-  color: var(--good);
-  background: var(--surface-2);
-  padding: 8px 13px;
-  border-radius: 99px;
-  flex: 1;
-}
-.key-actions { display: flex; gap: 2px; }
-.key-btn {
-  font-size: 13px; font-weight: 600;
-  padding: 7px 10px; border-radius: 9px;
-  color: var(--accent);
-}
-.key-btn:hover { background: var(--surface-2); }
-.key-btn.remove { color: var(--critical); }
-
-.key-add-row { display: flex; gap: 8px; }
-.key-add-row input {
-  flex: 1;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 11px;
-  padding: 10px 13px;
-  font-size: 13.5px;
-  outline: none;
-}
-.key-add-row input:focus { border-color: var(--accent); }
-.key-add-row .primary-btn { padding: 10px 15px; font-size: 13.5px; }
 
 /* ============ Toast ============ */
 .toast {
