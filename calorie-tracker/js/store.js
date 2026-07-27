@@ -12,7 +12,6 @@ const DEFAULT_SETTINGS = {
   proteinGoal: 120,
   theme: 'dark',
   profile: null, // { units, heightCm, weightKg, age, sex, activity, goal }
-  apiKey: null,  // Claude API key for AI meal recognition (stays on-device)
 };
 
 function read(key, fallback) {
@@ -82,6 +81,24 @@ export function migrateLegacyData() {
   if (legacyLog) write(dataKey(user.id, 'log'), legacyLog);
   localStorage.removeItem(LEGACY_SETTINGS_KEY);
   localStorage.removeItem(LEGACY_LOG_KEY);
+}
+
+// Earlier versions saved the Claude API key in each profile's settings.
+// The key is now session-only (memory), so scrub any copy left on disk.
+export function purgeStoredApiKeys() {
+  for (const user of listUsers()) {
+    const key = dataKey(user.id, 'settings');
+    const settings = read(key, null);
+    if (settings && 'apiKey' in settings) {
+      delete settings.apiKey;
+      write(key, settings);
+    }
+  }
+  const legacy = read(LEGACY_SETTINGS_KEY, null);
+  if (legacy && 'apiKey' in legacy) {
+    delete legacy.apiKey;
+    write(LEGACY_SETTINGS_KEY, legacy);
+  }
 }
 
 function activeId() {
