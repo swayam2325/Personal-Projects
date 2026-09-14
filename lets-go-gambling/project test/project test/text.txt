@@ -1,0 +1,125 @@
+//CUTSCENE 0
+The Grand House Casino..
+Known for its unbeatable dealers and illegal decks.
+Your Mission: Infiltrate the casino and make it to the top, taking down any dealers on the way.
+
+//CUTSCENE 1
+Sorry son, I can't let you do that.
+Me? I'm just a simple ol' slot machine. They replaced me with them newfangled digital ones, so now I guard the door.
+You're not the first to try this. Trust me, you don't wanna go up there.
+...
+(sigh) If you insist, let's battle.
+If you can't beat me, you have no chance up there.
+
+//CUTSCENE 2
+[1] Hiya! Did ya wanna pass?
+[2] All you stupid inspectors, you're all the same.
+[4] I wouldn't go up there. He's real scary.
+[6] Mr. H will always win. It has been decided.
+...
+[5] Fine, come fight me asshole!
+
+//CUTSCENE 3
+AHAHAHAHA! To pass you'll need to beat me!
+The infamous! The nefarious!
+Dr. Chip!
+...
+As the casino's resident scientist and engineer, it's my job to make sure all the machines are properly RIGGED.
+"Hey, did you just say all the machines are rigged?"
+Wha- No, of course, not go away.
+...
+So you still want to fight, eh? Let the experiment begin!
+
+//CUTSCENE 4
+Halt, Miscreant.
+I have seen you on cameras. You seek to destroy this place.
+But you see, I cannot let you..
+I am CameraBot2600. They know me here as Cameraman.
+And I am protector of this casino.
+...
+I see all, puny man. Can you truly say the same?
+
+//CUTSCENE 5
+
+//CUTSCENE 6
+
+//CUTSCENE 7
+Hey Buddy, Hi Pal.
+You're not supposed to be up here, you know that?
+All those MISERABLE dealers failed to do their jobs.
+I knew I should've fired their asses a loooong time ago..
+To be honest though, I don't know why you even came up here.
+You know I ALWAYS win, right?
+Heh, you never give up, do you?
+Sure. Let's give this a whirl.
+
+//CUTSCENE 8
+Look dude, you had no chance from the start.
+Men, can we get a cleaning crew up here?
+There's about to be a real bloody-
+...
+...I-
+I'm... bleeding?
+Heh, I almost forgot what it felt like.
+As of today you are banned from the Grand House Casino..
+You can cash your chips...
+IN HELL
+
+//CUTSCENE 9
+No! (Cough) This- You can't- (Cough)
+I win! (Cough Cough)
+I always... win...
+...
+Created By Aaron Smiljanic and Lane Velasco
+
+//CUTSCENE INTERMISSION
+[Going Up..]
+
+//CUTSCENE INTRO
+Use the ARROW KEYS to move, press SPACE to interact
+Ask around to find out info about the boss, Head to the elevator when you're ready.
+
+//NPC 1
+That bouncer is so mean!
+Did you know if he pulls more than one of his "Lucky 7's" he deals EXTRA damage?
+How unfair is that?
+
+//NPC 2
+I tried playing against that dice-dealer earlier. It was so weird.
+Somtimes she was aggressive, and others she would barely play cards.
+It was like she was changing personalities every 2 seconds.
+
+//NPC 3
+Pssst. I know a secret about this floor's dealer.
+We used to be colleagues, until his experiments went rogue.
+Watch out for his potion cards, they'll mix up your deck!
+
+//NPC 4
+The boss challenged me to a battle the other day, so I get my cards like normal...
+But get this- his cards kept flipping around!
+I had to try and keep track of them myself, but of course he won again...
+
+//NPC 5
+Oh.
+I suppose you're hoping for some hint on how to beat the next boss?
+There is none.
+Mr. H. always wins, so just give up now.
+
+//LINE 1
+I can't wait to spend all of my money!
+
+//LINE 2
+I think I'm only 1 play away from the big win!
+
+//LINE 3
+My wife said I should stop gambling..
+So I left her and decided to dedicate my life to it!
+
+//LINE 4
+I've been waiting in this line for 8 days, but it'll all be okay once I spend all my money.
+
+//CLERK
+Sorry sir, you'll have to wait in line.
+
+//FLOOR
+We couldn't get in, so we're playing here instead.
